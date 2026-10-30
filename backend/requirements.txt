@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+anthropic
+python-dotenv
+sqlalchemy
+alembic
+passlib[bcrypt]
+bcrypt==4.0.1
+python-jose[cryptography]
+email-validator
+pytest
+httpx
+azure-monitor-opentelemetry
+opentelemetry-instrumentation-fastapi
