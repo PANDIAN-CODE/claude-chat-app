@@ -153,7 +153,7 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'frontend'
           image: frontendImage
           env: [
-            { name: 'BACKEND_URL', value: '${backendApp.properties.configuration.ingress.fqdn}' }
+            { name: 'BACKEND_URL', value: 'https://${backendApp.properties.configuration.ingress.fqdn}' }
           ]
           resources: {
             cpu: json('0.25')
