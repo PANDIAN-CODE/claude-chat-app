@@ -12,20 +12,21 @@ if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import auth_router, chat_router
+from routers import auth_router, chat_router, documents_router
 
 app = FastAPI(title="Claude Chat API")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:4200"],
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["*"],
-    expose_headers=["X-Conversation-Id"],
+    expose_headers=["X-Conversation-Id", "X-Citations"],
 )
 
 app.include_router(auth_router.router)
 app.include_router(chat_router.router)
+app.include_router(documents_router.router)
 
 if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor

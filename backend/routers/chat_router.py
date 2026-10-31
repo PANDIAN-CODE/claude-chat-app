@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
@@ -7,6 +9,7 @@ import schemas
 from auth import get_current_user
 from database import get_db
 from services.claude_service import stream_reply
+from services.rag_service import build_rag_system_prompt, retrieve_relevant_chunks
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -84,10 +87,23 @@ def chat_stream(
     db.refresh(conv)
 
     history = [{"role": m.role, "content": m.content} for m in conv.messages]
-    generator = _persist_assistant_reply(conv.id, stream_reply(history), db.get_bind())
+
+    retrieved = retrieve_relevant_chunks(db, user.id, payload.message)
+    extra_system = build_rag_system_prompt(retrieved)
+    citations = [
+        {"document_id": c["document_id"], "filename": c["filename"]}
+        for c in {(c["document_id"], c["filename"]): c for c in retrieved}.values()
+    ]
+
+    generator = _persist_assistant_reply(
+        conv.id, stream_reply(history, extra_system), db.get_bind()
+    )
 
     return StreamingResponse(
         generator,
         media_type="text/plain",
-        headers={"X-Conversation-Id": str(conv.id)},
+        headers={
+            "X-Conversation-Id": str(conv.id),
+            "X-Citations": json.dumps(citations),
+        },
     )

@@ -12,3 +12,6 @@ pytest
 httpx
 azure-monitor-opentelemetry
 opentelemetry-instrumentation-fastapi
+pypdf
+scikit-learn
+python-multipart

@@ -2,11 +2,18 @@ import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { marked } from 'marked';
 import { AuthService } from './auth.service';
+import { DocumentsService } from './documents.service';
+
+interface Citation {
+  document_id: number;
+  filename: string;
+}
 
 interface Msg {
   role: 'user' | 'assistant';
   text: string;
   streaming?: boolean;
+  citations?: Citation[];
 }
 
 const API_BASE = '/api/chat';
@@ -22,6 +29,29 @@ const API_BASE = '/api/chat';
         <button class="logout" (click)="auth.logout()">Log out</button>
       </div>
 
+      <div class="docs">
+        <div class="docs-header">
+          <span>Documents</span>
+          <label class="upload-btn">
+            + Upload PDF
+            <input type="file" accept="application/pdf" hidden
+                   (change)="onFileSelected($event)" [disabled]="docs.uploading()" />
+          </label>
+        </div>
+        @if (docs.uploading()) { <div class="docs-status">Uploading...</div> }
+        @if (docs.error()) { <div class="docs-status error-text">{{ docs.error() }}</div> }
+        @if (docs.documents().length > 0) {
+          <div class="docs-list">
+            @for (d of docs.documents(); track d.id) {
+              <span class="doc-chip">
+                {{ d.filename }}
+                <button (click)="docs.remove(d.id)" title="Remove">×</button>
+              </span>
+            }
+          </div>
+        }
+      </div>
+
       <div class="chat">
         @for (m of messages(); track $index) {
           <div class="row" [class.me]="m.role === 'user'">
@@ -29,6 +59,11 @@ const API_BASE = '/api/chat';
               @if (m.role === 'assistant') {
                 <span [innerHTML]="render(m.text)"></span>
                 @if (m.streaming) { <span class="cursor">▍</span> }
+                @if (m.citations && m.citations.length > 0) {
+                  <div class="citations">
+                    Sources: {{ citationNames(m.citations) }}
+                  </div>
+                }
               } @else {
                 {{ m.text }}
               }
@@ -64,7 +99,19 @@ const API_BASE = '/api/chat';
     .header .logout { background: transparent; border: 1px solid #fff; color: #fff;
                        padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: normal;
                        cursor: pointer; }
-    .chat { height: 350px; overflow-y: auto; padding: 12px; background: #f6f8fa; }
+    .docs { padding: 8px 12px; border-bottom: 1px solid #d0d7de; background: #fafafa; }
+    .docs-header { display: flex; justify-content: space-between; align-items: center;
+                    font-size: 13px; font-weight: bold; color: #555; }
+    .upload-btn { font-size: 12px; font-weight: normal; color: #d97757; cursor: pointer;
+                  border: 1px solid #d97757; padding: 3px 8px; border-radius: 6px; }
+    .docs-status { font-size: 12px; color: #888; margin-top: 4px; }
+    .docs-status.error-text { color: #c0392b; }
+    .docs-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .doc-chip { background: #fff; border: 1px solid #e1e4e8; border-radius: 12px;
+                padding: 3px 8px; font-size: 12px; display: flex; align-items: center; gap: 4px; }
+    .doc-chip button { border: 0; background: transparent; cursor: pointer; color: #999;
+                        font-size: 14px; line-height: 1; padding: 0; }
+    .chat { height: 320px; overflow-y: auto; padding: 12px; background: #f6f8fa; }
     .row { display: flex; margin-bottom: 8px; }
     .row.me { justify-content: flex-end; }
     .bubble { max-width: 75%; padding: 8px 12px; border-radius: 12px;
@@ -74,6 +121,7 @@ const API_BASE = '/api/chat';
     .bubble :global(pre) { background: #f0f0f0; padding: 8px; border-radius: 6px; overflow-x: auto; }
     .bubble :global(code) { font-family: monospace; }
     .bubble.user { background: #d97757; color: #fff; border-color: #d97757; }
+    .citations { margin-top: 6px; font-size: 11px; color: #888; font-style: italic; }
     .cursor { animation: blink 1s step-start infinite; }
     @keyframes blink { 50% { opacity: 0; } }
     .bar { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #d0d7de; }
@@ -97,9 +145,11 @@ export class ChatComponent implements OnInit {
   private conversationId: number | null = null;
   private abortController?: AbortController;
 
-  constructor(public auth: AuthService) {}
+  constructor(public auth: AuthService, public docs: DocumentsService) {}
 
   async ngOnInit() {
+    this.docs.refresh();
+
     try {
       const conversations = await this.authedJson<{ id: number }[]>(
         `${API_BASE}/conversations`,
@@ -120,6 +170,17 @@ export class ChatComponent implements OnInit {
 
   render(text: string): string {
     return marked.parse(text, { async: false }) as string;
+  }
+
+  citationNames(citations: Citation[]): string {
+    return citations.map(c => c.filename).join(', ');
+  }
+
+  onFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) this.docs.upload(file);
+    input.value = '';
   }
 
   send() {
@@ -171,6 +232,16 @@ export class ChatComponent implements OnInit {
       const convId = res.headers.get('X-Conversation-Id');
       if (convId) this.conversationId = Number(convId);
 
+      const citationsHeader = res.headers.get('X-Citations');
+      if (citationsHeader) {
+        try {
+          const citations: Citation[] = JSON.parse(citationsHeader);
+          if (citations.length > 0) this.setLastAssistantCitations(citations);
+        } catch {
+          // malformed header - ignore, citations are a nice-to-have
+        }
+      }
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
@@ -205,6 +276,15 @@ export class ChatComponent implements OnInit {
       const copy = [...m];
       const last = copy[copy.length - 1];
       copy[copy.length - 1] = { ...last, text: last.text + chunk };
+      return copy;
+    });
+  }
+
+  private setLastAssistantCitations(citations: Citation[]) {
+    this.messages.update(m => {
+      const copy = [...m];
+      const last = copy[copy.length - 1];
+      copy[copy.length - 1] = { ...last, citations };
       return copy;
     });
   }

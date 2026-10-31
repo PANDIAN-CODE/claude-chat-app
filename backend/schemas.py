@@ -44,3 +44,11 @@ class ConversationOut(BaseModel):
 class ChatRequest(BaseModel):
     conversation_id: int | None = None
     message: str = Field(min_length=1, max_length=2000)
+
+
+class DocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    filename: str
+    created_at: datetime

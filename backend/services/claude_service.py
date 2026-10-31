@@ -19,12 +19,12 @@ def _mock_stream(last_message: str) -> Iterator[str]:
         time.sleep(0.05)
 
 
-def _claude_stream(messages: list[dict]) -> Iterator[str]:
+def _claude_stream(messages: list[dict], system_prompt: str) -> Iterator[str]:
     try:
         with client.messages.stream(
             model=MODEL,
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
+            system=system_prompt,
             messages=messages,
         ) as stream:
             for text in stream.text_stream:
@@ -33,7 +33,7 @@ def _claude_stream(messages: list[dict]) -> Iterator[str]:
         yield f"\n\n[Claude API error: {e}]"
 
 
-def stream_reply(history: list[dict]) -> Iterator[str]:
+def stream_reply(history: list[dict], extra_system: str = "") -> Iterator[str]:
     if MOCK_MODE:
         return _mock_stream(history[-1]["content"])
-    return _claude_stream(history)
+    return _claude_stream(history, SYSTEM_PROMPT + extra_system)
