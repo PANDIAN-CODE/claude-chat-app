@@ -41,9 +41,25 @@ class ConversationOut(BaseModel):
     created_at: datetime
 
 
+class ImagePayload(BaseModel):
+    media_type: str
+    data: str  # base64-encoded image bytes
+
+
 class ChatRequest(BaseModel):
     conversation_id: int | None = None
     message: str = Field(min_length=1, max_length=2000)
+    image: ImagePayload | None = None
+
+
+class UsageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    created_at: datetime
 
 
 class DocumentOut(BaseModel):

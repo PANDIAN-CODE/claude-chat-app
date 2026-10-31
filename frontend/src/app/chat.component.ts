@@ -14,6 +14,13 @@ interface Msg {
   text: string;
   streaming?: boolean;
   citations?: Citation[];
+  imagePreview?: string;
+}
+
+interface PendingImage {
+  mediaType: string;
+  base64: string;
+  previewUrl: string;
 }
 
 const API_BASE = '/api/chat';
@@ -65,6 +72,9 @@ const API_BASE = '/api/chat';
                   </div>
                 }
               } @else {
+                @if (m.imagePreview) {
+                  <img [src]="m.imagePreview" class="msg-image" alt="attached image" />
+                }
                 {{ m.text }}
               }
             </div>
@@ -79,7 +89,20 @@ const API_BASE = '/api/chat';
         </div>
       }
 
+      @if (pendingImage()) {
+        <div class="pending-image">
+          <img [src]="pendingImage()!.previewUrl" alt="preview" />
+          <span>Image attached</span>
+          <button (click)="clearPendingImage()" title="Remove">×</button>
+        </div>
+      }
+
       <div class="bar">
+        <label class="attach-btn" title="Attach image">
+          📎
+          <input type="file" accept="image/*" hidden
+                 (change)="onImageSelected($event)" [disabled]="loading()" />
+        </label>
         <input [(ngModel)]="input" (keyup.enter)="send()"
                maxlength="2000" placeholder="Type your question..."
                [disabled]="loading()" />
@@ -124,8 +147,15 @@ const API_BASE = '/api/chat';
     .citations { margin-top: 6px; font-size: 11px; color: #888; font-style: italic; }
     .cursor { animation: blink 1s step-start infinite; }
     @keyframes blink { 50% { opacity: 0; } }
-    .bar { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #d0d7de; }
-    .bar input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
+    .msg-image { max-width: 100%; border-radius: 8px; margin-bottom: 6px; display: block; }
+    .pending-image { display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+                      border-top: 1px solid #d0d7de; font-size: 12px; color: #555; }
+    .pending-image img { height: 40px; border-radius: 4px; }
+    .pending-image button { border: 0; background: transparent; cursor: pointer; color: #999;
+                             font-size: 16px; line-height: 1; margin-left: auto; }
+    .bar { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #d0d7de; align-items: center; }
+    .attach-btn { cursor: pointer; font-size: 18px; padding: 4px; }
+    .bar > input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
     .bar button { padding: 10px 18px; border: 0; border-radius: 6px;
                   background: #d97757; color: #fff; cursor: pointer; }
     .bar button:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -141,6 +171,7 @@ export class ChatComponent implements OnInit {
   messages = signal<Msg[]>([]);
   loading = signal(false);
   error = signal('');
+  pendingImage = signal<PendingImage | null>(null);
 
   private conversationId: number | null = null;
   private abortController?: AbortController;
@@ -183,13 +214,41 @@ export class ChatComponent implements OnInit {
     input.value = '';
   }
 
+  onImageSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(',')[1];
+      this.pendingImage.set({
+        mediaType: file.type || 'image/png',
+        base64,
+        previewUrl: dataUrl,
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  clearPendingImage() {
+    this.pendingImage.set(null);
+  }
+
   send() {
     const text = this.input.trim();
     if (!text || this.loading()) return;
 
-    this.messages.update(m => [...m, { role: 'user', text }]);
+    const image = this.pendingImage();
+    this.messages.update(m => [
+      ...m,
+      { role: 'user', text, imagePreview: image?.previewUrl },
+    ]);
     this.input = '';
-    this.streamReply(text);
+    this.pendingImage.set(null);
+    this.streamReply(text, image);
   }
 
   retry() {
@@ -199,11 +258,15 @@ export class ChatComponent implements OnInit {
     this.streamReply(lastUser.text);
   }
 
+  private toImagePayload(image: PendingImage | null) {
+    return image ? { media_type: image.mediaType, data: image.base64 } : undefined;
+  }
+
   stop() {
     this.abortController?.abort();
   }
 
-  private async streamReply(message: string) {
+  private async streamReply(message: string, image: PendingImage | null = null) {
     this.error.set('');
     this.loading.set(true);
 
@@ -217,7 +280,11 @@ export class ChatComponent implements OnInit {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.auth.token()}`,
         },
-        body: JSON.stringify({ conversation_id: this.conversationId, message }),
+        body: JSON.stringify({
+          conversation_id: this.conversationId,
+          message,
+          image: this.toImagePayload(image),
+        }),
         signal: this.abortController.signal,
       });
 

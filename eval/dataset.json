@@ -1,0 +1,50 @@
+{
+  "document_chunks": [
+    {
+      "document_id": 1,
+      "filename": "company_handbook.pdf",
+      "content": "Employees are entitled to 15 paid vacation days per calendar year, accrued monthly. Unused vacation days roll over up to a maximum of 5 days into the following year."
+    },
+    {
+      "document_id": 1,
+      "filename": "company_handbook.pdf",
+      "content": "The standard work week is 40 hours, Monday through Friday. Remote work is permitted up to 3 days per week with manager approval."
+    },
+    {
+      "document_id": 1,
+      "filename": "company_handbook.pdf",
+      "content": "Expense reports must be submitted within 30 days of the expense date. Reimbursements are processed on the 15th and last day of each month."
+    },
+    {
+      "document_id": 2,
+      "filename": "onboarding_guide.pdf",
+      "content": "New employees receive a laptop, a company email account, and access to the internal wiki on their first day. IT setup typically takes 2 hours."
+    }
+  ],
+  "questions": [
+    {
+      "question": "How many vacation days do employees get per year?",
+      "reference_answer": "15 paid vacation days per calendar year, with up to 5 unused days rolling over to the next year.",
+      "expects_citation": true,
+      "expected_filename": "company_handbook.pdf"
+    },
+    {
+      "question": "Can I work from home?",
+      "reference_answer": "Yes, remote work is allowed up to 3 days per week with manager approval.",
+      "expects_citation": true,
+      "expected_filename": "company_handbook.pdf"
+    },
+    {
+      "question": "What do new employees get on their first day?",
+      "reference_answer": "A laptop, a company email account, and access to the internal wiki.",
+      "expects_citation": true,
+      "expected_filename": "onboarding_guide.pdf"
+    },
+    {
+      "question": "What is the capital of Japan?",
+      "reference_answer": "Tokyo.",
+      "expects_citation": false,
+      "expected_filename": null
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Float, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -18,6 +18,9 @@ class User(Base):
     )
     documents = relationship(
         "Document", back_populates="user", cascade="all, delete-orphan"
+    )
+    usage_logs = relationship(
+        "UsageLog", back_populates="user", cascade="all, delete-orphan"
     )
 
 
@@ -76,3 +79,21 @@ class DocumentChunk(Base):
     content = Column(Text, nullable=False)
 
     document = relationship("Document", back_populates="chunks")
+
+
+class UsageLog(Base):
+    """Token/cost tracking per request - deliberately stores no message
+    content (PII-safe by design), only counts and metadata."""
+
+    __tablename__ = "usage_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=True)
+    model = Column(String, nullable=False)
+    input_tokens = Column(Integer, nullable=False, default=0)
+    output_tokens = Column(Integer, nullable=False, default=0)
+    cost_usd = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="usage_logs")

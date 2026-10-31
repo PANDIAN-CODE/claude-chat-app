@@ -14,4 +14,5 @@ azure-monitor-opentelemetry
 opentelemetry-instrumentation-fastapi
 pypdf
 scikit-learn
+rank_bm25
 python-multipart
