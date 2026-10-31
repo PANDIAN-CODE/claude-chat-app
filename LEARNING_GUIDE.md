@@ -410,7 +410,71 @@ when you have Azure admin access.
 hosting, environment variables for secrets (never hardcode API keys),
 free-tier constraints (sleep after idle, no persistent disk, 512MB RAM).
 
-### Step 12 — PWA (installable mobile app)
+### Step 12 — Agentic AI (tool use / agent loop)
+
+Up to Step 8, the backend **always** searched uploaded PDFs before every reply,
+whether the question needed it or not. That's RAG, but it's not agentic — the
+app decided to search, not the AI. This step changes that.
+
+```python
+# services/claude_service.py
+SEARCH_DOCUMENTS_TOOL = {
+    "name": "search_documents",
+    "description": "Search the user's uploaded PDFs...",
+    "input_schema": {"type": "object",
+                      "properties": {"query": {"type": "string"}},
+                      "required": ["query"]},
+}
+```
+
+This is a **tool definition** — not code Claude runs, just a description of a
+capability it's allowed to request. The loop:
+
+1. Send the conversation + `tools=[SEARCH_DOCUMENTS_TOOL]` to Claude.
+2. If `response.stop_reason == "tool_use"` — Claude decided it needs to search.
+   Read the `query` it generated, actually run `retrieve_relevant_chunks()`
+   (the same TF-IDF search from Step 8), and send the results back as a
+   `tool_result` message.
+3. Claude sees the results and either answers, or calls the tool again
+   (capped at `MAX_AGENT_ITERATIONS = 3` so a confused model can't loop forever).
+4. Once `stop_reason != "tool_use"`, that's the final answer.
+
+This is the **agent loop** pattern underlying every AI agent framework
+(LangGraph, Claude Agent SDK, AutoGPT, etc.) at its core: give the model tools,
+let it reason about which to use, execute what it asks for, feed the result
+back, repeat until done. We implemented the loop by hand here (no framework)
+specifically so you can see every step of it.
+
+**Why this matters over Step 8's approach:** ask "What's the capital of
+France?" and the old version would waste a search on your PDFs for no reason.
+The agentic version lets Claude recognize that's general knowledge and skip
+the tool entirely — more accurate, and cheaper (fewer tokens spent on
+irrelevant document text).
+
+**What you learned:** tool/function-calling schemas (JSON Schema), the
+reason → act → observe loop, why agent loops need an iteration cap, and the
+difference between "the app always does X" and "the AI decides whether to
+do X."
+
+### Step 13 — Two topics deliberately *not* implemented
+
+**Fine-tuning** — training a custom version of a model on your own data.
+Not implemented here because Anthropic doesn't offer customer fine-tuning for
+Claude the way some other providers do for their models — you can't retrain
+Claude's weights yourself via the API. The nearest equivalent available to you
+is what this whole project already does: steering behavior with a good system
+prompt and RAG, which covers the vast majority of real use cases anyway.
+
+**Local/open-source models (e.g., via Ollama)** — running a model like Llama
+or Mistral on your own machine instead of calling a cloud API. Not implemented
+because it's a different architecture, not an addition to this one: it would
+mean replacing the Anthropic SDK calls entirely, downloading multi-gigabyte
+model weight files, and accepting noticeably lower answer quality than Claude
+— which defeats the point of a project specifically about building a *Claude*
+chat app. Worth trying as a **separate, standalone exercise** if you want to
+compare a local model's quality/speed/cost tradeoffs against calling Claude.
+
+### Step 14 — PWA (installable mobile app)
 
 ```
 ng add @angular/pwa
@@ -443,14 +507,14 @@ Mapped against the 11-topic roadmap you shared earlier:
 | 3 | Prompt caching, batch APIs | ❌ Not covered |
 | 4 | RAG — embeddings, chunking, vector DBs | ✅ Chunking + retrieval done; ❌ real embeddings/vector DB (used TF-IDF instead) |
 | 4 | Hybrid search, re-ranking, citations | ✅ Citations done; ❌ hybrid/re-ranking |
-| 5 | Tool use / function calling | ❌ Not covered |
-| 6 | Agentic AI (agent loops, MCP, multi-agent) | ❌ Not covered |
+| 5 | Tool use / function calling | ✅ Covered (Step 12 — `search_documents` tool) |
+| 6 | Agentic AI (agent loops, MCP, multi-agent) | ✅ Agent loop covered (Step 12); ❌ MCP and multi-agent not covered |
 | 7 | Multimodal (image/PDF/audio input) | Partially — PDF text extraction only, no image/vision |
 | 8 | Evaluation (test sets, LLM-as-judge) | ❌ Not covered |
 | 9 | Safety/guardrails (prompt injection, PII) | ❌ Not covered (worth noting: your RAG prompt has no injection defense yet) |
 | 10 | LLMOps (logging/tracing, cost monitoring) | Partially — Application Insights wired in, but not LLM-specific tracing |
 | 10 | Deployment | ✅ Fully covered (Docker, CI/CD, cloud hosting) |
-| 11 | Fine-tuning / local models | ❌ Not covered |
+| 11 | Fine-tuning / local models | ❌ Deliberately skipped — see Step 13 for why |
 
 **Angular-specific AI topics not yet covered** (relevant to your "next project"
 suggestion of Angular + RAG):
@@ -504,9 +568,11 @@ git push origin main
 4. Step 5–6 (history + UI polish) — quick wins once auth works
 5. Step 8 (RAG) — the AI-specific part; read Part 4 Step 8's "why TF-IDF" section
    carefully before building
-6. Step 9–11 (Docker, CI/CD, deploy) — infrastructure; can be skipped at first
+6. Step 12 (agent loop / tool use) — once RAG works, this is a natural next
+   step: same search function, but let Claude decide when to call it
+7. Step 9–11 (Docker, CI/CD, deploy) — infrastructure; can be skipped at first
    and added later once the app works locally
-7. Step 12 (PWA) — purely cosmetic, do it last
+8. Step 14 (PWA) — purely cosmetic, do it last
 
 Good luck — build it once by following this guide, then try rebuilding it a
 second time from memory, only checking this doc when stuck. That's the fastest
